@@ -89,6 +89,11 @@
         </intent>
         <!-- Lets the app check that Health Connect is installed -->
         <package android:name="com.google.android.apps.healthdata"/>
+        <!-- Opening the privacy / support page in the browser -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
         <!-- Share sheet targets -->
         <intent>
             <action android:name="android.intent.action.SEND"/>

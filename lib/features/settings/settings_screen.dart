@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api.dart';
 import '../../core/app_state.dart';
@@ -170,14 +171,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _toggle('reduceMotion', 'Reduce motion', 'Fewer animations and transitions', fallback: false),
         _toggle('haptics', 'Haptics', 'A tap when something lands'),
       ]),
-      ('Subscription', [
-        _link('Exerlio Pro', 'Body composition trends, custom macros', (c) => () => c.push(const ProScreen()), value: (a) => a.me.b('is_pro') ? 'Pro' : 'Free plan'),
-        _link('Restore purchases', 'If you have paid before', (c) => () => c.say(c.app.me.b('is_pro') ? 'Pro is already on for this account' : 'Nothing to restore on this account')),
-      ]),
       ('Support', [
-        _link('Help centre', 'Guides and common questions', (c) => () => _info(c, 'Help centre', 'Guides live at exerlio.in/help. Tap copy and open it in your browser.', 'https://exerlio.in/help')),
+        _link('Help centre', 'Guides and common questions', (c) => () => _info(c, 'Help centre', 'Contact details and answers to common questions.', 'https://api.chandus7.in/api/exerlio/v1/legal/#support')),
         _link('Report a problem', 'Something broken or wrong', (c) => () => _report(c)),
-        _link('Terms and privacy', 'The long version', (c) => () => _info(c, 'Terms and privacy', 'Our terms and privacy policy are at exerlio.in/legal.', 'https://exerlio.in/legal')),
+        _link('Terms and privacy', 'The long version', (c) => () => _info(c, 'Terms and privacy', 'What we collect, how we use it, and the rules for using Exerlio.', 'https://api.chandus7.in/api/exerlio/v1/legal/')),
       ]),
     ];
   }
@@ -243,6 +240,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         XSheetHead(title),
         Text(body, style: XT.body(ctx)),
         gap16,
+        XButton('Open', icon: Icons.open_in_new_rounded, onTap: () async {
+          Navigator.pop(ctx);
+          if (!await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication) && context.mounted) {
+            context.say('Could not open the link');
+          }
+        }),
+        gap8,
         XButton('Copy link', kind: XBtn.secondary, icon: Icons.link_rounded, onTap: () {
           Clipboard.setData(ClipboardData(text: url));
           Navigator.pop(ctx);
@@ -297,7 +301,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(app.me.s('name'), style: XT.h3(context).copyWith(fontSize: 16, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
-                  Text('${app.me.s('email', '@${app.me.s('handle')}')} · ${app.me.b('is_pro') ? 'Pro' : 'Free plan'}',
+                  Text(app.me.s('email', '@${app.me.s('handle')}'),
                       maxLines: 1, overflow: TextOverflow.ellipsis, style: XT.small(context)),
                 ]),
               ),

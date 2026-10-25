@@ -1,7 +1,7 @@
 name: fitness
 description: Exerlio — train, track, recover, connect.
 publish_to: 'none'
-version: 3.0.0+9
+version: 3.0.0+10
 
 environment:
   sdk: ^3.5.0
@@ -19,6 +19,7 @@ dependencies:
   path_provider: ^2.1.6
   health: ^13.3.2
   wakelock_plus: ^1.8.2
+  url_launcher: ^6.3.3
 
 dev_dependencies:
   flutter_test:
