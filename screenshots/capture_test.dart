@@ -1,4 +1,4 @@
-// App Store screenshots (iPhone 6.9", 1290x2796) rendered from the real screens
+// App Store screenshots (iPhone 6.3", 1206x2622) rendered from the real screens
 // against the live API, logged in as the demo account.
 //
 //   flutter test screenshots/capture_test.dart
@@ -59,8 +59,8 @@ void main() {
   });
 
   testWidgets('store screenshots', (tester) async {
-    // 430 x 932 points at 3x = 1290 x 2796, with iPhone safe areas.
-    tester.view.physicalSize = const Size(1290, 2796);
+    // 402 x 874 points at 3x = 1206 x 2622 (the size App Store Connect asks for), with iPhone safe areas.
+    tester.view.physicalSize = const Size(1206, 2622);
     tester.view.devicePixelRatio = 3;
     tester.view.padding = const FakeViewPadding(top: 62 * 3, bottom: 34 * 3);
     tester.view.viewPadding = const FakeViewPadding(top: 62 * 3, bottom: 34 * 3);
