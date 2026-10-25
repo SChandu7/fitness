@@ -1,0 +1,49 @@
+# Exerlio iOS build → TestFlight (Codemagic).
+# Start it from Codemagic: app "fitness" → Start new build → workflow "Exerlio iOS → TestFlight".
+workflows:
+  exerlio-ios-testflight:
+    name: Exerlio iOS → TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      # Name of the App Store Connect API key integration in Codemagic → Team settings → Integrations
+      app_store_connect: CODEMAGIC_ASC_INTEGRATION
+    environment:
+      flutter: 3.47.7
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.fitzz.app
+      vars:
+        APP_STORE_APPLE_ID: "0000000000" # numeric Apple ID of the Exerlio app in App Store Connect
+        BUILD_NAME: 3.0.0
+        EXERLIO_API: https://api.chandus7.in/api/exerlio/v1
+    scripts:
+      - name: Use App Store provisioning profile
+        script: xcode-project use-profiles
+      - name: Get packages
+        script: flutter pub get
+      - name: Install pods
+        script: cd ios && pod install --repo-update
+      - name: Analyze
+        script: flutter analyze
+      - name: Build IPA
+        script: |
+          LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" || echo 0)
+          BUILD_NUMBER=$((LATEST + 1))
+          echo "Building $BUILD_NAME ($BUILD_NUMBER)"
+          flutter build ipa --release \
+            --build-name="$BUILD_NAME" \
+            --build-number="$BUILD_NUMBER" \
+            --dart-define=EXERLIO_API="$EXERLIO_API" \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Internal testers get every processed build automatically (TestFlight → Internal Testing).
+        submit_to_testflight: true
