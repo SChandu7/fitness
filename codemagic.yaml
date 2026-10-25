@@ -16,7 +16,7 @@ workflows:
         distribution_type: app_store
         bundle_identifier: com.fitzz.app
       vars:
-        APP_STORE_APPLE_ID: "0000000000" # numeric Apple ID of the Exerlio app in App Store Connect
+        APP_STORE_APPLE_ID: "6826928438" # Exerlio in App Store Connect (com.fitzz.app)
         BUILD_NAME: 3.0.0
         EXERLIO_API: https://api.chandus7.in/api/exerlio/v1
     scripts:
