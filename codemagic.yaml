@@ -6,8 +6,8 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 60
     integrations:
-      # Name of the App Store Connect API key integration in Codemagic → Team settings → Integrations
-      app_store_connect: CODEMAGIC_ASC_INTEGRATION
+      # Apple API key saved in Codemagic → Personal account settings → Integrations → Developer Portal
+      app_store_connect: InfuMedz App Store Connect
     environment:
       flutter: 3.47.7
       xcode: latest
