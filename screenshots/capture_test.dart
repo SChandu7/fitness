@@ -69,6 +69,7 @@ void main() {
     late int chId, actId;
     await tester.runAsync(() async {
       final login = Map<String, dynamic>.from(await Api.i.post('auth/login/', {'identifier': 'akif@exerlio.in', 'password': 'Exerlio@123'}) as Map);
+      // ignore: invalid_use_of_visible_for_testing_member
       SharedPreferences.setMockInitialValues({'exerlio.token': login.s('token')});
       app = AppState();
       await app.boot();

@@ -9,10 +9,15 @@ import '../../core/theme.dart';
 import '../../core/ui.dart';
 
 /// Meal scan: photo → Gemini on the server → items, macros, allergy and meal-limit warnings.
+/// Each item can be changed (dish, grams or pieces) and the oil/ghee level set before logging;
+/// the server recalculates from the Exerlio dish catalogue.
 class ScanScreen extends StatefulWidget {
   final String? slot;
   final bool barcode, fromLibrary;
-  const ScanScreen({super.key, this.slot, this.barcode = false, this.fromLibrary = false});
+
+  /// Opens straight on a scan result (tests and screenshots).
+  final Json? result;
+  const ScanScreen({super.key, this.slot, this.barcode = false, this.fromLibrary = false, this.result});
   @override
   State<ScanScreen> createState() => _ScanScreenState();
 }
@@ -25,14 +30,28 @@ class _ScanScreenState extends State<ScanScreen> {
   String _portion = 'Medium';
   String? _slot;
   final Set<String> _removed = {};
+  final Map<String, Json> _edits = {};
+  String? _oil;
+  List<Json>? _dishes;
   bool _busy = false;
   late bool _barcode = widget.barcode;
+
+  static const _oils = ['light', 'normal', 'heavy'];
+
+  /// What the server needs to recalculate this plate.
+  Json get _choices => {'portion': _portion, 'removed': _removed.toList(), 'edits': _edits, if (_oil != null) 'oil': _oil};
 
   @override
   void initState() {
     super.initState();
     _slot = widget.slot;
     _portion = context.app.settingStr('portion', 'Medium');
+    if (widget.result != null) {
+      _r = widget.result!;
+      _slot ??= _r.s('slot');
+      _stage = _Stage.result;
+      return;
+    }
     if (widget.fromLibrary || widget.barcode) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _pick(widget.fromLibrary ? ImageSource.gallery : ImageSource.camera));
     }
@@ -59,6 +78,8 @@ class _ScanScreenState extends State<ScanScreen> {
         _r = Map<String, dynamic>.from(r as Map);
         _slot ??= _r.s('slot');
         _removed.clear();
+        _edits.clear();
+        _oil = null;
         _stage = _Stage.result;
       });
     } on ApiError catch (e) {
@@ -70,7 +91,7 @@ class _ScanScreenState extends State<ScanScreen> {
 
   Future<void> _preview() async {
     try {
-      final r = await Api.i.post('meals/scan/${_r.i('scan_id')}/preview/', {'portion': _portion, 'removed': _removed.toList(), 'slot': _slot});
+      final r = await Api.i.post('meals/scan/${_r.i('scan_id')}/preview/', {..._choices, 'slot': _slot});
       if (mounted) setState(() => _r = Map<String, dynamic>.from(r as Map));
     } on ApiError catch (e) {
       if (mounted) context.say(e.message);
@@ -82,8 +103,7 @@ class _ScanScreenState extends State<ScanScreen> {
     final r = await attempt(context, () => Api.i.post('meals/', {
           'source': 'scan',
           'scan_id': _r.i('scan_id'),
-          'portion': _portion,
-          'removed': _removed.toList(),
+          ..._choices,
           'slot': _slot,
         }));
     if (!mounted) return;
@@ -96,7 +116,7 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   Future<void> _savePlate() async {
-    final r = await attempt(context, () => Api.i.post('foods/', {'scan_id': _r.i('scan_id'), 'portion': _portion, 'removed': _removed.toList()}));
+    final r = await attempt(context, () => Api.i.post('foods/', {'scan_id': _r.i('scan_id'), ..._choices}));
     if (r != null && mounted) {
       context.say('${(r as Map)['message']}');
       context.app.changed();
@@ -253,7 +273,7 @@ class _ScanScreenState extends State<ScanScreen> {
             gap8,
             Text(_r.s('meal_name'), style: XT.h3(context)),
             Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-              Text('${t.i('kcal')}', style: XT.hero(context).copyWith(fontSize: 72)),
+              Text('${t.i('kcal')}', key: const Key('scan-total-kcal'), style: XT.hero(context).copyWith(fontSize: 72)),
               const SizedBox(width: 6),
               Text('kcal', style: XT.small(context)),
             ]),
@@ -264,39 +284,9 @@ class _ScanScreenState extends State<ScanScreen> {
               Expanded(child: XStat('Fat', '${t.i('fat')} g', size: 20)),
             ]),
             gap12,
-            for (final it in items)
-              Press(
-                onTap: () {
-                  setState(() => _removed.contains(it.s('key')) ? _removed.remove(it.s('key')) : _removed.add(it.s('key')));
-                  _preview();
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.line))),
-                  child: Opacity(
-                    opacity: it.b('removed') ? .45 : 1,
-                    child: Row(children: [
-                      Expanded(
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(it.s('name'), style: XT.h3(context).copyWith(fontSize: 15, decoration: it.b('removed') ? TextDecoration.lineThrough : null)),
-                          const SizedBox(height: 2),
-                          Text.rich(TextSpan(children: [
-                            TextSpan(text: it.s('portion')),
-                            if (it.strs('allergy').isNotEmpty)
-                              TextSpan(text: ' · contains ${it.strs('allergy').map((e) => e.toLowerCase()).join(', ')}',
-                                  style: TextStyle(color: c.red, fontWeight: FontWeight.w500)),
-                          ]), style: XT.small(context)),
-                        ]),
-                      ),
-                      Text('${it.i('kcal_p')} kcal · ${it.i('protein_p')} g protein', style: XT.small(context)),
-                      const SizedBox(width: 6),
-                      Icon(it.b('removed') ? Icons.add_circle_outline_rounded : Icons.remove_circle_outline_rounded, size: 18, color: c.muted),
-                    ]),
-                  ),
-                ),
-              ),
+            for (final it in items) _item(it),
             gap8,
-            Text('Tap an item to take it off the plate.', style: XT.small(context)),
+            Text('Tap an item to change the dish or amount. Tap − to take it off the plate.', style: XT.small(context)),
             gap16,
             const XLabel('Add to'),
             gap8,
@@ -312,9 +302,26 @@ class _ScanScreenState extends State<ScanScreen> {
                 }),
               ),
             ]),
+            if (_r.b('asks_oil')) ...[
+              gap12,
+              Row(children: [
+                Expanded(child: Text('Oil / ghee', style: XT.small(context))),
+                SizedBox(
+                  width: 220,
+                  child: XSegment(height: 32, labels: const ['Light', 'Normal', 'Heavy'], index: _oils.indexOf(_oil ?? _r.s('oil', 'normal')).clamp(0, 2), onPick: (i) {
+                    setState(() => _oil = _oils[i]);
+                    _preview();
+                  }),
+                ),
+              ]),
+            ],
             gap16,
             for (final w in _r.l('warnings')) ...[_warning(w), gap12],
-            Text('Portions are estimates. Tap Retake if something looks off, or save it as a regular meal.', style: XT.small(context)),
+            Text(
+                _r.i('recipe_share') > 0
+                    ? 'Estimates. ${_r.i('recipe_share')}% of items use Exerlio recipe values; check the amounts and change anything that looks off.'
+                    : 'Portions are estimates. Tap Retake if something looks off, or save it as a regular meal.',
+                style: XT.small(context)),
             gap8,
             Text(_r.s('nudge'), style: XT.small(context, color: c.ink)),
           ]),
@@ -325,6 +332,78 @@ class _ScanScreenState extends State<ScanScreen> {
         ]),
       ]),
     );
+  }
+
+  Widget _item(Json it) {
+    final c = context.c;
+    final key = it.s('key');
+    final gone = it.b('removed');
+    final unsure = !it.b('sure', true) && !gone;
+    final alts = it.l('alternatives');
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.line))),
+      child: Opacity(
+        opacity: gone ? .45 : 1,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(
+              child: Press(
+                onTap: gone ? null : () => _editItem(it),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(it.s('name'), style: XT.h3(context).copyWith(fontSize: 15, decoration: gone ? TextDecoration.lineThrough : null)),
+                  const SizedBox(height: 2),
+                  Text.rich(TextSpan(children: [
+                    TextSpan(text: it.s('portion')),
+                    if (it.s('basis') == 'recipe') const TextSpan(text: ' · recipe value'),
+                    if (it.b('edited')) const TextSpan(text: ' · changed'),
+                    if (it.strs('allergy').isNotEmpty)
+                      TextSpan(text: ' · contains ${it.strs('allergy').map((e) => e.toLowerCase()).join(', ')}',
+                          style: TextStyle(color: c.red, fontWeight: FontWeight.w500)),
+                  ]), style: XT.small(context)),
+                ]),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text('${it.i('kcal_p')} kcal', style: XT.small(context, color: c.ink)),
+              Text('${it.i('protein_p')} g protein', style: XT.small(context)),
+            ]),
+            XIconBtn(gone ? Icons.add_circle_outline_rounded : Icons.remove_circle_outline_rounded,
+                tooltip: gone ? 'Put back on the plate' : 'Take off the plate', color: c.muted, onTap: () {
+              setState(() => gone ? _removed.remove(key) : _removed.add(key));
+              _preview();
+            }),
+          ]),
+          if (unsure) ...[
+            gap8,
+            Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              Text(alts.isEmpty ? 'Not sure about this one. Tap it to check.' : 'Not sure. Is it', style: XT.small(context, color: c.orange)),
+              for (final a in alts)
+                XChip(a.s('name'), on: false, onTap: () {
+                  setState(() => _edits[key] = {...?_edits[key], 'dish': a.s('key')});
+                  _preview();
+                }),
+            ]),
+          ],
+        ]),
+      ),
+    );
+  }
+
+  /// Change one item: the dish (from the Exerlio catalogue) and the amount in grams or pieces.
+  Future<void> _editItem(Json it) async {
+    final key = it.s('key');
+    if (_dishes == null) {
+      final r = await attempt(context, () => Api.i.get('meals/dishes/'));
+      if (r == null || !mounted) return;
+      _dishes = Map<String, dynamic>.from(r as Map).l('items');
+    }
+    if (!mounted) return;
+    final edit = await showXSheet<Json>(context, (_) => _ItemSheet(item: it, dishes: _dishes!, edited: _edits.containsKey(key)));
+    if (edit == null || !mounted) return;
+    setState(() => edit.isEmpty ? _edits.remove(key) : _edits[key] = edit);
+    _preview();
   }
 
   Widget _warning(Json w) {
@@ -338,6 +417,107 @@ class _ScanScreenState extends State<ScanScreen> {
         gap8,
         Text(l.s('label'), style: XT.small(context, color: c.ink)),
         for (final s in l.l('steps')) Padding(padding: const EdgeInsets.only(top: 4), child: Text('· ${s.s('name')}: ${s.s('action')}', style: XT.small(context))),
+      ],
+    ]);
+  }
+}
+
+/// The "change this item" sheet. Pops the edit for the server ({dish, count | grams}),
+/// an empty map to undo earlier changes, or null when dismissed.
+class _ItemSheet extends StatefulWidget {
+  final Json item;
+  final List<Json> dishes;
+  final bool edited;
+  const _ItemSheet({required this.item, required this.dishes, required this.edited});
+  @override
+  State<_ItemSheet> createState() => _ItemSheetState();
+}
+
+class _ItemSheetState extends State<_ItemSheet> {
+  final _search = TextEditingController();
+  late String _dish = widget.item.s('dish');
+  // Foods outside the catalogue that the AI counted in pieces keep their own per-piece weight.
+  late double _pieceG = widget.item.s('dish').isEmpty && widget.item.s('unit') == 'pieces' && widget.item.d('count') > 0
+      ? widget.item.d('grams') / widget.item.d('count')
+      : widget.item.d('piece_g');
+  late int _count = widget.item.d('count') > 0 ? widget.item.d('count').round() : 1;
+  late int _grams = widget.item.d('grams') > 0 ? widget.item.d('grams').round() : 150;
+
+  bool get _byPieces => _pieceG > 0;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  void _pick(Json d) => setState(() {
+        final pg = d.d('piece_g');
+        if (pg > 0 && !_byPieces) _count = (_grams / pg).round().clamp(1, 30);
+        if (pg == 0 && _byPieces) _grams = (_count * _pieceG).round();
+        _dish = d.s('key');
+        _pieceG = pg;
+        _search.clear();
+      });
+
+  void _step(int dir) => setState(() {
+        if (_byPieces) {
+          _count = (_count + dir).clamp(1, 30);
+        } else {
+          _grams = (_grams + dir * (_grams <= 100 ? 10 : 25)).clamp(10, 2000);
+        }
+      });
+
+  @override
+  Widget build(BuildContext context) {
+    final it = widget.item;
+    final unit = it.s('unit') == 'ml' ? 'ml' : 'g';
+    final q = _search.text.trim().toLowerCase();
+    final matches = q.isEmpty ? <Json>[] : widget.dishes.where((d) => d.s('name').toLowerCase().contains(q)).take(8).toList();
+    final current = widget.dishes.firstWhere((d) => d.s('key') == _dish, orElse: () => <String, dynamic>{});
+    return XSheetBody(children: [
+      XSheetHead(current.isEmpty ? it.s('name') : current.s('name'),
+          sub: current.isEmpty
+              ? 'AI estimate. Pick the dish below to use Exerlio recipe values.'
+              : 'Exerlio recipe values · ${current.i('kcal_100')} kcal and ${current.s('protein_100')} g protein per 100 g'),
+      gap16,
+      const XLabel('Amount'),
+      gap8,
+      Row(children: [
+        XIconBtn(Icons.remove_rounded, tooltip: 'Less', onTap: () => _step(-1)),
+        Expanded(
+          child: Text(_byPieces ? '$_count piece${_count == 1 ? '' : 's'} · about ${(_count * _pieceG).round()} g' : '$_grams $unit',
+              textAlign: TextAlign.center, style: XT.h3(context)),
+        ),
+        XIconBtn(Icons.add_rounded, tooltip: 'More', onTap: () => _step(1)),
+      ]),
+      gap16,
+      const XLabel('Dish'),
+      gap8,
+      if (it.l('alternatives').isNotEmpty) ...[
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final a in it.l('alternatives'))
+            XChip(a.s('name'), on: _dish == a.s('key'), onTap: () => _pick(widget.dishes.firstWhere((d) => d.s('key') == a.s('key'), orElse: () => a))),
+        ]),
+        gap8,
+      ],
+      XField(controller: _search, hint: 'Search dishes, e.g. rasam, paratha, dal', onChanged: (_) => setState(() {})),
+      for (final d in matches)
+        XRow(d.s('name'),
+            sub: '${d.i('kcal_100')} kcal · ${d.s('protein_100')} g protein per 100 g',
+            trailing: d.s('key') == _dish ? Icon(Icons.check_rounded, color: context.c.ink) : null,
+            divider: d != matches.last,
+            onTap: () => _pick(d)),
+      if (q.isNotEmpty && matches.isEmpty)
+        Padding(padding: const EdgeInsets.only(top: 8), child: Text('No dish found. Keep the AI estimate or try another name.', style: XT.small(context))),
+      gap24,
+      XButton('Use this', onTap: () => Navigator.pop(context, <String, dynamic>{
+            if (_dish.isNotEmpty) 'dish': _dish,
+            if (_byPieces) 'count': _count else 'grams': _grams,
+          })),
+      if (widget.edited) ...[
+        gap8,
+        XButton('Undo my changes', kind: XBtn.ghost, onTap: () => Navigator.pop(context, <String, dynamic>{})),
       ],
     ]);
   }
