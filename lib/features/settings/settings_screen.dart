@@ -12,7 +12,9 @@ import '../auth/forgot_screen.dart';
 import '../people/social_list_screen.dart';
 import '../profile/edit_profile_sheet.dart';
 import '../routes.dart';
+import '../shared/pickers.dart';
 import 'devices_screen.dart';
+import 'womens_health_screen.dart';
 
 /// Settings: every row is wired to the server (users.settings JSON or a real field).
 class SettingsScreen extends StatefulWidget {
@@ -71,25 +73,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (k == 'restDays' || k == 'diet') app.changed();
       }, value: (app) => show?.call(app.settingStr(k, fallback)) ?? app.settingStr(k, fallback));
 
-  List<(String, List<_Row>)> _sections(AppState app) {
+  /// (title, subtitle, icon, rows). Each becomes its own page; search looks across all of them.
+  List<(String, String, IconData, List<_Row>)> _sections(AppState app) {
     final T = app.me.m('targets');
     final u = app.units;
+    final female = app.me.s('sex') == 'female';
     return [
-      ('Experience', [
-        _link('Interface mode', app.genz ? 'Gen Z · expressive copy and motion' : 'Classic · clean and focused', (c) => () => c.app.toggleMode(),
-            value: (a) => a.genz ? 'Gen Z' : 'Classic'),
-        _link('Connected devices', 'Apple Health, Health Connect, Garmin and Strava', (c) => () => c.push(const DevicesScreen()), value: (_) => 'Manage'),
-        _link('Personal profile', 'Name, age, height, weight and goals', (c) => () => showEditProfile(c), value: (_) => 'Edit'),
-      ]),
-      ('Account', [
+      ('Personal profile', 'Your details, goals and health', Icons.person_outline_rounded, [
         _link('Name and photo', 'How friends recognise you', (c) => () => showEditProfile(c), value: (a) => a.me.s('name')),
         _link('Username', 'Your handle across Exerlio', (c) => () => showEditProfile(c), value: (a) => '@${a.me.s('handle')}'),
+        _link('Age, height and weight', 'Used for your targets and heart-rate zones', (c) => () => showEditProfile(c), value: (_) => 'Edit'),
+        _link('Fitness goals', 'What you are training for', (c) => () => _goals(c), value: (a) => a.me.s('goal_label')),
+        _link('Health conditions', 'Shapes your diet limits and plan', (c) => () => _conditions(c),
+            value: (a) => a.me.strs('conditions').isEmpty ? 'None' : '${a.me.strs('conditions').length} added'),
+        if (female)
+          _link("Women's health", 'Cycle, life stage and rest-day support', (c) => () => c.push(const WomensHealthScreen()), value: (_) => 'Open'),
         _link('Email and password', 'Sign-in details', (c) => () => c.push(ForgotScreen(prefill: c.app.me.s('email', c.app.me.s('mobile')))),
             value: (a) => a.me.s('email', a.me.s('mobile'))),
-        _pick('units', 'Units', 'Weight, distance and volume', 'Metric'),
-        _pick('lang', 'Language', 'App language', 'English (India)'),
       ]),
-      ('Your goals', [
+      ('Preferences', 'Look, language and units', Icons.tune_rounded, [
+        _link('Interface mode', app.genz ? 'Gen Z · expressive copy and motion' : 'Classic · clean and focused', (c) => () => c.app.toggleMode(),
+            value: (a) => a.genz ? 'Gen Z' : 'Classic'),
+        _pick('units', 'Units', 'Weight, distance and volume', 'Metric'),
+        _pick('lang', 'Language', 'More languages are coming', 'English (India)'),
+        _pick('textSize', 'Text size', 'Applies across the app', 'Default'),
+        _toggle('night', 'Night mode', 'Dark surfaces, easier on the eyes in low light', fallback: false),
+        _toggle('nightAuto', 'Night mode from 9 pm to 6 am', 'Switches on automatically at night', fallback: false),
+        _toggle('reduceMotion', 'Reduce motion', 'Fewer animations and transitions', fallback: false),
+        _toggle('haptics', 'Haptics', 'A tap when something lands'),
+      ]),
+      ('Connected devices', 'Apple Health, Health Connect, Garmin and Strava', Icons.watch_outlined, [
+        _link('Devices and apps', 'Steps, workouts, heart rate and sleep', (c) => () => c.push(const DevicesScreen()), value: (_) => 'Manage'),
+      ]),
+      ('Goals and targets', 'Calories, protein, water and training days', Icons.flag_outlined, [
         _link('Daily calories', 'Adjusts with your training load', (c) => () => showEditProfile(c), value: (_) => '${fmtN(T.i('kcal'))} kcal'),
         _link('Protein goal', 'Part of your daily streak', (c) => () => showEditProfile(c), value: (_) => '${T.i('protein')} g'),
         _link('Water goal', '${T.i('glasses')} glasses a day', (c) => () => showEditProfile(c), value: (_) => u.volume(T.d('water_l'))),
@@ -110,7 +126,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           if (v != null && c.mounted) await attempt(c, () => app.updateMe({'work_end_hour': v}));
         }, value: (a) => a.me.s('work_end_label')),
       ]),
-      ('Streaks and challenges', [
+      ('Streaks and challenges', 'What counts, passes and friends', Icons.local_fire_department_outlined, [
         _Row('What counts as a day', 'Workout, diet and recovery session',
             (context) => XRow('What counts as a day', sub: 'Workout, diet and recovery session', trailing: Text('All three', style: XT.small(context, color: context.c.ink)))),
         _pick('restDays', 'Rest-day passes a month', 'Missed days that do not break the streak', '2'),
@@ -118,16 +134,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _toggle('allowNudges', 'Allow nudges', 'Friends can prod you when you slip'),
         _link('Challenge history', 'Everything you have entered', (c) => () => Go.challenges(c)),
       ]),
-      ('Nutrition and scanning', [
+      ('Nutrition and scanning', 'Food alerts, portions and saved meals', Icons.restaurant_outlined, [
         _toggle('confirmScan', 'Confirm before logging', 'Review the plate the scanner found'),
         _toggle('showVitamins', 'Show vitamins and minerals', 'On every scan result'),
         _pick('portion', 'Portion sizes', 'How the scanner estimates by default', 'Medium'),
         _pick('diet', 'Dietary needs', 'Flags anything you avoid', 'None'),
-        _link('Allergies', 'Warns you before you log', (c) => () => _allergies(c),
-            value: (a) => a.me.strs('allergies').isEmpty ? 'None' : a.me.strs('allergies').join(', ')),
+        _link('Food alerts', 'Allergies, intolerances and sensitivities', (c) => () => _allergies(c),
+            value: (a) => a.me.strs('allergies').isEmpty ? 'None' : '${a.me.strs('allergies').length} added'),
         _link('Saved meals', 'Log a regular meal in one tap', (c) => () => Go.meal(c, tab: 1)),
       ]),
-      ('Notifications', [
+      ('Notifications', 'Reminders, activity and quiet hours', Icons.notifications_none_rounded, [
         _toggle('nHyd', 'Hydration reminders', 'Every 2 hours, 9 am to 8 pm'),
         _toggle('nDiet', 'Diet goal check-in', 'At 4 pm if protein is behind'),
         _toggle('nStreak', 'Streak at risk', 'One hour before your bedtime'),
@@ -137,7 +153,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _toggle('nWeekly', 'Weekly summary', 'Sunday evening'),
         _pick('quiet', 'Quiet hours', 'Nothing arrives in this window', '22:00 – 07:00'),
       ]),
-      ('Privacy', [
+      ('Privacy and safety', 'What you share and who sees it', Icons.shield_outlined, [
         _link('Account privacy', app.me.b('is_private') ? 'Private · you approve every follower' : 'Public · anyone can follow', (c) => () async {
           final a = c.app;
           final priv = !a.me.b('is_private');
@@ -159,19 +175,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _toggle('shareMeals', 'Share scanned meals', 'Off by default, meals stay private', fallback: false),
         _toggle('showWeight', 'Show weight and body composition', 'Never shown in the feed', fallback: false),
         _toggle('showGym', 'Show where you trained', 'Gym name on shared workouts'),
+        _link('Health data', 'How Exerlio uses health information', (c) => () => _explain(c, 'Health data', const [
+              'Conditions, medicines, cycle check-ins and device data are optional. You choose what to add.',
+              'They are used only to shape your own plan and targets, never for advertising.',
+              'Health and cycle details are never shown on your profile or in the feed.',
+              'Connected apps can be disconnected at any time under Connected devices.',
+            ])),
+        _link('Community safety', 'Reporting, muting and messages', (c) => () => _explain(c, 'Community safety', const [
+              'Use the menu on any post or reel to report it or mute the person.',
+              'Choose who can message you above: everyone, or only mutual followers.',
+              'A private profile means you approve every follower.',
+              'Reports are reviewed by the Exerlio team.',
+            ])),
+        _link('Export your data', 'Everything you have logged, as CSV', (c) => () => _export(c)),
+        _link('Terms and privacy policy', 'What we collect and the rules for using Exerlio',
+            (c) => () => _info(c, 'Terms and privacy', 'What we collect, how we use it, and the rules for using Exerlio.', 'https://api.chandus7.in/api/exerlio/v1/legal/')),
       ]),
-      ('Data', [
+      ('Data and offline', 'Your information and offline use', Icons.storage_outlined, [
         _link('Export your data', 'Everything you have logged, as CSV', (c) => () => _export(c)),
         _toggle('offline', 'Offline mode', 'Keep workouts available without signal', fallback: false),
       ]),
-      ('Accessibility', [
-        _pick('textSize', 'Text size', 'Applies across the app', 'Default'),
-        _toggle('night', 'Night mode', 'Dark surfaces, easier on the eyes in low light', fallback: false),
-        _toggle('nightAuto', 'Night mode from 9 pm to 6 am', 'Switches on automatically at night', fallback: false),
-        _toggle('reduceMotion', 'Reduce motion', 'Fewer animations and transitions', fallback: false),
-        _toggle('haptics', 'Haptics', 'A tap when something lands'),
+      ('Subscription', 'Exerlio Pro', Icons.workspace_premium_outlined, [
+        _link('Exerlio Pro', 'Body composition trends and custom macros', (c) => () => c.push(const ProScreen()),
+            value: (a) => a.me.b('is_pro') ? 'Pro' : 'Free plan'),
       ]),
-      ('Support', [
+      ('Support', 'Help, feedback and policies', Icons.help_outline_rounded, [
         _link('Help centre', 'Guides and common questions', (c) => () => _info(c, 'Help centre', 'Contact details and answers to common questions.', 'https://api.chandus7.in/api/exerlio/v1/legal/#support')),
         _link('Report a problem', 'Something broken or wrong', (c) => () => _report(c)),
         _link('Terms and privacy', 'The long version', (c) => () => _info(c, 'Terms and privacy', 'What we collect, how we use it, and the rules for using Exerlio.', 'https://api.chandus7.in/api/exerlio/v1/legal/')),
@@ -183,30 +211,94 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _allergies(BuildContext context) async {
     final app = context.app;
-    final picked = {...app.me.strs('allergies')};
+    var picked = app.me.strs('allergies');
     final other = TextEditingController(text: app.me.s('allergy_other'));
     final ok = await showXSheet<bool>(context, (ctx) => StatefulBuilder(
           builder: (ctx, set) => XSheetBody(children: [
-            const XSheetHead('Allergies', sub: 'The meal scanner warns you before you log anything with these.'),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              for (final a in app.catalog.strs('allergies'))
-                XChip(a, on: picked.contains(a), check: true, onTap: () => set(() => picked.contains(a) ? picked.remove(a) : picked.add(a))),
-            ]),
-            gap16,
-            const XLabel('Anything else'),
-            gap8,
-            XField(controller: other, hint: 'e.g. sesame, mustard'),
+            const XSheetHead('Food alerts', sub: 'The meal scanner flags matching foods before you log them.'),
+            FoodAlertPicker(catalog: app.catalog, picked: picked, other: other, onChanged: (v) => set(() => picked = v)),
             gap20,
             XButton('Save', onTap: () => Navigator.pop(ctx, true)),
             gap16,
           ]),
         ));
     if (ok == true && context.mounted) {
-      final r = await attempt(context, () => app.updateMe({'allergies': picked.toList(), 'allergy_other': other.text.trim()}));
-      if (r != null && context.mounted) context.say('Allergies saved');
+      final r = await attempt(context,
+          () => app.updateMe({'allergies': picked, 'allergy_other': picked.contains('Other') ? other.text.trim() : ''}));
+      if (r != null && context.mounted) context.say('Food alerts saved');
     }
     other.dispose();
   }
+
+  Future<void> _conditions(BuildContext context) async {
+    final app = context.app;
+    var picked = app.me.strs('conditions');
+    final other = TextEditingController(text: app.me.s('condition_other'));
+    final ok = await showXSheet<bool>(context, (ctx) => StatefulBuilder(
+          builder: (ctx, set) => XSheetBody(children: [
+            const XSheetHead('Health conditions', sub: 'Only you see these.'),
+            ConditionPicker(catalog: app.catalog, picked: picked, other: other, onChanged: (v) => set(() => picked = v)),
+            gap20,
+            XButton('Save', onTap: () => Navigator.pop(ctx, true)),
+            gap16,
+          ]),
+        ));
+    if (ok == true && context.mounted) {
+      if (picked.contains('Other') && other.text.trim().isEmpty) {
+        context.say('Tell us about your other condition, or untick Other.');
+      } else {
+        final r = await attempt(context,
+            () => app.updateMe({'conditions': picked, 'condition_other': picked.contains('Other') ? other.text.trim() : ''}));
+        if (r != null && context.mounted) context.say('Health conditions saved. Targets updated.');
+      }
+    }
+    other.dispose();
+  }
+
+  Future<void> _goals(BuildContext context) async {
+    final app = context.app;
+    var picked = app.me.strs('goals');
+    final other = TextEditingController(text: app.me.s('goal_other'));
+    final ok = await showXSheet<bool>(context, (ctx) => StatefulBuilder(
+          builder: (ctx, set) => XSheetBody(children: [
+            const XSheetHead('Fitness goals', sub: 'Choose all that apply. The first one sets your calorie target.'),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final g in app.catalog.l('goals'))
+                XChip(g.s('label'), on: picked.contains(g.s('key')), check: true,
+                    onTap: () => set(() => picked = toggleExclusive(picked, g.s('key'), const ['unsure']))),
+            ]),
+            if (picked.contains('other')) ...[gap16, const XLabel('Your goal'), gap8, XField(controller: other, hint: 'e.g. climb Kilimanjaro')],
+            gap20,
+            XButton('Save', onTap: () => Navigator.pop(ctx, true)),
+            gap16,
+          ]),
+        ));
+    if (ok == true && context.mounted) {
+      if (picked.isEmpty) {
+        context.say('Choose at least one goal.');
+      } else if (picked.contains('other') && other.text.trim().isEmpty) {
+        context.say('Tell us your goal in a few words, or untick Other.');
+      } else {
+        final r = await attempt(context, () => app.updateMe({'goals': picked, 'goal_other': other.text.trim()}));
+        if (r != null && context.mounted) context.say('Goals saved. Targets updated.');
+      }
+    }
+    other.dispose();
+  }
+
+  Future<void> _explain(BuildContext context, String title, List<String> lines) => showXSheet(context, (ctx) => XSheetBody(children: [
+        XSheetHead(title),
+        for (final l in lines)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Padding(padding: EdgeInsets.only(top: 7), child: XDot(size: 6)),
+              const SizedBox(width: 10),
+              Expanded(child: Text(l, style: XT.body(ctx))),
+            ]),
+          ),
+        gap8,
+      ]));
 
   Future<void> _export(BuildContext context) async {
     context.say('Preparing your export…');
@@ -284,11 +376,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final app = context.appWatch;
+    final c = context.c;
     final q = _q.toLowerCase();
-    final sections = [
-      for (final s in _sections(app))
-        (s.$1, s.$2.where((r) => q.isEmpty || r.title.toLowerCase().contains(q) || r.sub.toLowerCase().contains(q) || s.$1.toLowerCase().contains(q)).toList()),
-    ].where((s) => s.$2.isNotEmpty).toList();
+    final all = _sections(app);
+    final hits = [
+      for (final s in all)
+        for (final r in s.$4)
+          if (q.isNotEmpty && (r.title.toLowerCase().contains(q) || r.sub.toLowerCase().contains(q) || s.$1.toLowerCase().contains(q))) r,
+    ];
     return XScreen(
       body: Column(children: [
         const XTopBar('Settings'),
@@ -301,8 +396,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(app.me.s('name'), style: XT.h3(context).copyWith(fontSize: 16, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
-                  Text(app.me.s('email', '@${app.me.s('handle')}'),
-                      maxLines: 1, overflow: TextOverflow.ellipsis, style: XT.small(context)),
+                  Text(app.me.s('email', '@${app.me.s('handle')}'), maxLines: 1, overflow: TextOverflow.ellipsis, style: XT.small(context)),
                 ]),
               ),
               XChip(app.genz ? 'GEN Z' : 'CLASSIC', on: false, onTap: app.toggleMode),
@@ -311,20 +405,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
             XField(
               controller: _search,
               hint: 'Search settings',
-              prefix: Icon(Icons.search_rounded, size: 20, color: context.c.muted),
+              prefix: Icon(Icons.search_rounded, size: 20, color: c.muted),
               onChanged: (v) => setState(() => _q = v.trim()),
             ),
-            if (sections.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 24), child: Text('No settings match "$_q".', style: XT.small(context))),
-            for (final s in sections) ...[
-              Padding(padding: const EdgeInsets.fromLTRB(0, 18, 0, 2), child: XLabel(s.$1)),
-              for (final r in s.$2) r.build(context),
-            ],
+            gap8,
+            if (q.isNotEmpty) ...[
+              if (hits.isEmpty)
+                Padding(padding: const EdgeInsets.symmetric(vertical: 24), child: Text('No settings match "$_q".', style: XT.small(context))),
+              for (final r in hits) r.build(context),
+            ] else
+              for (final s in all)
+                XRow(s.$1,
+                    sub: s.$2,
+                    chevron: true,
+                    leading: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(color: c.gray, borderRadius: BorderRadius.circular(XS.r2)),
+                      child: Icon(s.$3, size: 20, color: c.ink),
+                    ),
+                    onTap: () => s.$1 == 'Connected devices'
+                        ? context.push(const DevicesScreen())
+                        : context.push(_SettingsPage(title: s.$1, sub: s.$2, rows: s.$4))),
             gap24,
             XButton('Log out', kind: XBtn.secondary, onTap: _logout),
             gap8,
             XButton('Delete account', kind: XBtn.secondary, onTap: _delete),
             gap12,
-            Text('Exerlio 3.0', textAlign: TextAlign.center, style: XT.small(context)),
+            Text('Exerlio 3.2', textAlign: TextAlign.center, style: XT.small(context)),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+
+/// One settings category on its own page.
+class _SettingsPage extends StatelessWidget {
+  final String title, sub;
+  final List<_Row> rows;
+  const _SettingsPage({required this.title, required this.sub, required this.rows});
+  @override
+  Widget build(BuildContext context) {
+    context.appWatch;
+    return XScreen(
+      body: Column(children: [
+        XTopBar(title),
+        Expanded(
+          child: ListView(padding: const EdgeInsets.fromLTRB(XS.gutter, 4, XS.gutter, 32), children: [
+            Text(sub, style: XT.small(context)),
+            gap8,
+            for (final r in rows) r.build(context),
           ]),
         ),
       ]),

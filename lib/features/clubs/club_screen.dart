@@ -55,7 +55,7 @@ class _ClubScreenState extends State<ClubScreen> {
                     Row(children: [
                       Icon(d.b('is_private') ? Icons.lock_outline_rounded : Icons.public_rounded, size: 14, color: c.muted),
                       const SizedBox(width: 6),
-                      Flexible(child: Text('${d.s('type')} · ${d.b('is_private') ? 'Private' : 'Public'} · ${d.s('city')}', style: XT.small(context))),
+                      Flexible(child: Text('${d.strs('sports').isNotEmpty ? d.strs('sports').take(3).join(', ') : d.s('type')} · ${d.b('is_private') ? 'Private' : 'Public'} · ${d.s('city')}', style: XT.small(context))),
                     ]),
                     gap8,
                     Text('${d.s('description')}${d.s('admin').isNotEmpty ? ' Run by ${d.s('admin')}.' : ''}', style: XT.body(context)),

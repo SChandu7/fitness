@@ -12,6 +12,7 @@ import '../routes.dart';
 import '../settings/devices_screen.dart';
 import '../shared/body_cards.dart';
 import '../train/exhaust_card.dart';
+import 'focus_poster.dart';
 
 /// Home → Dashboard. Everything for today, top to bottom, as in the client's v3 prototype.
 class Dashboard extends StatefulWidget {
@@ -61,6 +62,7 @@ class _DashboardState extends State<Dashboard> {
           gap24,
           _sportPicker(sports, d.l('library')),
           gap20,
+          if (d.m('poster').isNotEmpty) ...[FocusPoster(d.m('poster'), key: ValueKey(d.m('poster').s('focus'))), gap20],
           _plan(d.m('plan')),
           gap16,
           _challenges(d.l('challenges')),

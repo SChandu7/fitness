@@ -17,7 +17,7 @@ class _NewClubScreenState extends State<NewClubScreen> {
   final _name = TextEditingController();
   late final _city = TextEditingController(text: context.app.me.s('location', 'Guntur'));
   final _desc = TextEditingController();
-  String _type = 'Running';
+  final List<String> _sports = [];
   bool _private = false, _busy = false;
   String _err = '';
 
@@ -31,12 +31,13 @@ class _NewClubScreenState extends State<NewClubScreen> {
 
   Future<void> _create() async {
     if (_name.text.trim().isEmpty) return setState(() => _err = 'Give your club a name.');
+    if (_sports.isEmpty) return setState(() => _err = 'Pick at least one sport or activity.');
     setState(() => _busy = true);
     try {
       final r = await Api.i.post('clubs/', {
         'name': _name.text.trim(),
         'city': _city.text.trim(),
-        'type': _type,
+        'sports': _sports,
         'is_private': _private,
         'description': _desc.text.trim(),
       }) as Map;
@@ -67,10 +68,18 @@ class _NewClubScreenState extends State<NewClubScreen> {
             gap8,
             XField(controller: _city, hint: 'City'),
             gap16,
-            const XLabel('Type'),
+            Row(children: [
+              const Expanded(child: XLabel('Sports and activities')),
+              Text(_sports.isEmpty ? 'Pick all that apply' : '${_sports.length} selected',
+                  style: XT.small(context, color: _sports.isEmpty ? null : context.c.ink)),
+            ]),
             gap8,
             Wrap(spacing: 8, runSpacing: 8, children: [
-              for (final t in context.app.catalog.strs('club_types')) XChip(t, on: _type == t, onTap: () => setState(() => _type = t)),
+              for (final t in context.app.catalog.strs('club_sports'))
+                XChip(t, on: _sports.contains(t), check: true, onTap: () => setState(() {
+                      _sports.contains(t) ? _sports.remove(t) : (_sports.length < 15 ? _sports.add(t) : null);
+                      _err = '';
+                    })),
             ]),
             gap16,
             const XLabel('About · optional'),
@@ -79,7 +88,11 @@ class _NewClubScreenState extends State<NewClubScreen> {
             gap16,
             const XLabel('Who can join'),
             gap8,
-            XSegment(labels: const ['Anyone', 'I approve'], index: _private ? 1 : 0, onPick: (i) => setState(() => _private = i == 1)),
+            XChoice(icon: Icons.public_rounded, title: 'Anyone', sub: 'Open to everyone. People join straight away.',
+                on: !_private, onTap: () => setState(() => _private = false)),
+            gap8,
+            XChoice(icon: Icons.verified_user_outlined, title: 'I approve', sub: 'People ask to join and you accept them.',
+                on: _private, onTap: () => setState(() => _private = true)),
             if (_err.isNotEmpty) ...[gap12, Row(children: [const XDot(), const SizedBox(width: 8), Text(_err, style: XT.small(context, color: context.c.ink))])],
           ]),
         ),

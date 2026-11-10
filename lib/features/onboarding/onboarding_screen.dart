@@ -5,6 +5,7 @@ import '../../core/app_state.dart';
 import '../../core/theme.dart';
 import '../../core/ui.dart';
 import '../shared/body_cards.dart';
+import '../shared/pickers.dart';
 
 /// Setup steps after the account exists (steps 2–15 of 15).
 /// Used for first-time setup and for "Redo your setup" from Profile.
@@ -47,6 +48,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Json? _preview;
   late Json d;
   final _other = TextEditingController();
+  final _goalOther = TextEditingController();
+  final _conditionOther = TextEditingController();
   final _meds = TextEditingController();
 
   @override
@@ -54,7 +57,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.initState();
     final me = context.app.me;
     d = {
-      'goal': me.s('goal', 'active'),
+      'goals': me.strs('goals').isNotEmpty ? me.strs('goals') : <String>[if (widget.redo) me.s('goal', 'active')],
       'sports': widget.redo ? me.strs('sports') : <String>[],
       'experience': me.s('experience', 'intermediate'),
       'weight_kg': me.d('weight_kg', 70),
@@ -69,12 +72,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       'is_private': me.b('is_private'),
     };
     _other.text = me.s('allergy_other');
+    _goalOther.text = me.s('goal_other');
+    _conditionOther.text = me.s('condition_other');
     _meds.text = me.s('medications');
   }
 
   @override
   void dispose() {
     _other.dispose();
+    _goalOther.dispose();
+    _conditionOther.dispose();
     _meds.dispose();
     super.dispose();
   }
@@ -85,7 +92,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Json _payload() => {
         ...d,
         'weight_kg': (d['weight_kg'] as num).toStringAsFixed(1),
-        'allergy_other': _other.text.trim(),
+        'allergy_other': (d['allergies'] as List).contains('Other') ? _other.text.trim() : '',
+        'goal_other': (d['goals'] as List).contains('other') ? _goalOther.text.trim() : '',
+        'condition_other': (d['conditions'] as List).contains('Other') ? _conditionOther.text.trim() : '',
         'medications': _meds.text.trim(),
       };
 
@@ -98,6 +107,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _next() async {
+    final goals = d['goals'] as List;
+    if (step == 'goal' && goals.isEmpty) return setState(() => _err = 'Choose at least one goal.');
+    if (step == 'goal' && goals.contains('other') && _goalOther.text.trim().isEmpty) {
+      return setState(() => _err = 'Tell us your goal in a few words.');
+    }
     if (step == 'sports' && (d['sports'] as List).isEmpty) return setState(() => _err = 'Pick at least one sport.');
     if (step == 'body' && !((d['age'] as int) >= 14 && (d['age'] as int) <= 80)) return setState(() => _err = 'Age should be between 14 and 80.');
     if (step == 'ready') return _finish();
@@ -152,9 +166,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final choice = const ['goal', 'exp', 'days', 'time', 'sleep'].contains(step);
+    final choice = const ['exp', 'days', 'time', 'sleep'].contains(step);
     final sports = (d['sports'] as List).length;
+    final goals = (d['goals'] as List).length;
     final label = switch (step) {
+      'goal' => goals > 0 ? 'Continue · $goals selected' : 'Choose at least one',
       'sports' => sports > 0 ? 'Continue with $sports' : 'Pick at least one',
       'ready' => widget.redo ? 'Save my plan' : 'Go to my dashboard',
       _ => 'Continue',
@@ -179,7 +195,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
         ]),
         dock: XDock(children: [
-          XButton(choice ? 'Continue' : label, loading: _busy, onTap: step == 'sports' && sports == 0 ? null : _next),
+          XButton(choice ? 'Continue' : label, loading: _busy,
+              onTap: (step == 'sports' && sports == 0) || (step == 'goal' && goals == 0) ? null : _next),
         ]),
       ),
     );
@@ -196,60 +213,40 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ],
       ];
 
-  List<Widget> _slider(String field, int min, int max, String unit, {bool decimal = false}) {
-    final v = (d[field] as num).toDouble().clamp(min.toDouble(), max.toDouble());
-    return [
-      Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-        Text(decimal ? v.toStringAsFixed(1) : '${v.round()}', style: XT.hero(context)),
-        const SizedBox(width: 8),
-        Text(unit, style: XT.small(context)),
-      ]),
-      gap8,
-      SliderTheme(
-        data: SliderThemeData(
-            activeTrackColor: context.c.ink, inactiveTrackColor: context.c.gray, thumbColor: context.c.ink, overlayColor: Colors.transparent),
-        child: Slider(
-          value: v,
+  List<Widget> _wheel(String field, int min, int max, String unit, String label, {bool decimal = false}) => [
+        NumberWheel(
+          value: (d[field] as num).toDouble(),
           min: min.toDouble(),
           max: max.toDouble(),
-          divisions: decimal ? (max - min) * 2 : max - min,
-          semanticFormatterCallback: (x) => '${decimal ? x.toStringAsFixed(1) : x.round()} $unit',
-          onChanged: (x) => _set(field, decimal ? (x * 2).round() / 2 : x.round()),
+          step: decimal ? .5 : 1,
+          unit: unit,
+          label: label,
+          onChanged: (v) => _set(field, decimal ? v : v.round()),
         ),
-      ),
-      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text('$min $unit', style: XT.small(context)),
-        Text('$max $unit', style: XT.small(context)),
-      ]),
-    ];
-  }
-
-  List<Widget> _toggleChips(String field, List<String> opts) {
-    final list = List<String>.from(d[field] as List);
-    return [
-      Wrap(spacing: 8, runSpacing: 8, children: [
-        for (final k in opts)
-          XChip(k, on: list.contains(k), check: true, onTap: () {
-            list.contains(k) ? list.remove(k) : list.add(k);
-            _set(field, list);
-          }),
-      ]),
-      gap12,
-      Align(
-        alignment: Alignment.centerLeft,
-        child: XButton(list.isEmpty ? (field == 'allergies' ? 'I have none' : 'No conditions') : 'Clear all',
-            small: true, expand: false, kind: XBtn.secondary, onTap: () => _set(field, <String>[])),
-      ),
-    ];
-  }
+      ];
 
   List<Widget> _body() {
     final c = context.c;
     switch (step) {
       case 'goal':
+        final picked = List<String>.from(d['goals'] as List);
         return [
-          ..._q('What are you here for?', 'You can change this any time.'),
-          ..._choices('goal', [for (final g in catalog.l('goals')) (g.s('key'), g.s('label'), null)]),
+          ..._q('What are you here for?', 'Choose all that apply. The first one you pick sets your calorie target.'),
+          for (final g in catalog.l('goals')) ...[
+            XChoice(
+              title: g.s('label'),
+              sub: g.s('sub').isEmpty ? null : g.s('sub'),
+              on: picked.contains(g.s('key')),
+              onTap: () => _set('goals', toggleExclusive(picked, g.s('key'), const ['unsure'])),
+            ),
+            gap8,
+          ],
+          if (picked.contains('other')) ...[
+            gap8,
+            const XLabel('Your goal'),
+            gap8,
+            XField(controller: _goalOther, hint: 'e.g. climb Kilimanjaro', onChanged: (_) => setState(() => _err = '')),
+          ],
         ];
       case 'sports':
         final list = List<String>.from(d['sports'] as List);
@@ -266,21 +263,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       case 'exp':
         return [
           ..._q('Where are you starting from?', 'Honest answers make better plans.'),
-          ..._choices('experience', [for (final g in catalog.l('levels')) (g.s('key'), g.s('label'), null)]),
+          ..._choices('experience', [for (final g in catalog.l('levels')) (g.s('key'), g.s('label'), g.s('sub').isEmpty ? null : g.s('sub'))]),
         ];
       case 'weight':
-        return [..._q('What do you weigh?', 'Used for calorie, protein and water targets.'), ..._slider('weight_kg', 40, 140, 'kg', decimal: true)];
+        return [..._q('What do you weigh?', 'Used for calorie, protein and water targets.'), ..._wheel('weight_kg', 40, 140, 'kg', 'Weight', decimal: true)];
       case 'height':
         return [
           ..._q('How tall are you?', 'Last body question, nearly.'),
-          ..._slider('height_cm', 140, 210, 'cm'),
+          ..._wheel('height_cm', 140, 210, 'cm', 'Height'),
           gap20,
           BmiCard(weight: (d['weight_kg'] as num).toDouble(), height: (d['height_cm'] as num).toDouble()),
         ];
       case 'body':
         return [
           ..._q('Age and sex', 'Sets your heart-rate zones and calorie estimate. Only you see this.'),
-          ..._slider('age', 14, 80, 'years'),
+          ..._wheel('age', 14, 80, 'years', 'Age'),
           gap20,
           const XLabel('Sex'),
           gap8,
@@ -293,17 +290,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ];
       case 'food':
         return [
-          ..._q('Any allergies or food intolerances?', 'We will warn you on every meal scan if a plate contains them.'),
-          ..._toggleChips('allergies', catalog.strs('allergies')),
-          gap20,
-          const XLabel('Other allergy or intolerance'),
-          gap8,
-          XField(controller: _other, hint: 'e.g. sesame, or leave blank'),
+          ..._q('Any allergies, intolerances or sensitivities?', 'Select all that apply. Only you see this.'),
+          FoodAlertPicker(catalog: catalog, picked: List<String>.from(d['allergies'] as List), other: _other,
+              onChanged: (v) => _set('allergies', v)),
         ];
       case 'health':
         return [
-          ..._q('Do you have any of these conditions?', 'Pick all that apply. This changes your diet limits and workout plan. Only you see this.'),
-          ..._toggleChips('conditions', catalog.strs('conditions')),
+          ..._q('Any health conditions we should know about?', 'Select all that apply. They shape your diet limits and workout plan. Only you see this.'),
+          ConditionPicker(catalog: catalog, picked: List<String>.from(d['conditions'] as List), other: _conditionOther,
+              onChanged: (v) => _set('conditions', v)),
         ];
       case 'meds':
         return [

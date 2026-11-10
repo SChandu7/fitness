@@ -72,6 +72,7 @@ class XButton extends StatelessWidget {
       XBtn.ghost => (Colors.transparent, c.ink, Colors.transparent),
     };
     final disabled = onTap == null || loading;
+    final light = c.bg.computeLuminance() > .5;
     final h = small ? 40.0 : 52.0;
     return Press(
       onTap: disabled ? null : onTap,
@@ -86,7 +87,17 @@ class XButton extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: bg,
-            borderRadius: BorderRadius.circular(small ? XS.rSm : XS.r2),
+            // light mode: soft gradient and lift on the two filled kinds (Exerlio 3.1 premium layer)
+            gradient: light && !disabled && kind == XBtn.primary
+                ? const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF242629), Color(0xFF08090A)])
+                : light && !disabled && kind == XBtn.accent
+                    ? const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFFFF8730), Color(0xFFFF6B00)])
+                    : null,
+            boxShadow: light && !disabled && (kind == XBtn.primary || kind == XBtn.accent)
+                ? [BoxShadow(color: (kind == XBtn.accent ? c.orange : const Color(0xFF000000)).withValues(alpha: kind == XBtn.accent ? .19 : .13),
+                    blurRadius: 12, offset: const Offset(0, 5))]
+                : null,
+            borderRadius: BorderRadius.circular(small ? 13 : 16),
             border: border == Colors.transparent ? null : Border.all(color: border),
           ),
           child: loading
@@ -177,13 +188,20 @@ class XCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.c;
+    final light = c.bg.computeLuminance() > .5;
     final body = Container(
       width: double.infinity,
       padding: padding,
       decoration: BoxDecoration(
         color: color ?? (dark ? c.ink : (muted ? c.gray : c.surface)),
-        borderRadius: BorderRadius.circular(context.genz ? XS.r4 : XS.r3),
-        border: (muted || dark || color != null) ? null : Border.all(color: c.line),
+        gradient: light && dark && color == null
+            ? const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF17191D), Color(0xFF050505)], stops: [0, .72])
+            : null,
+        borderRadius: BorderRadius.circular(context.genz ? 24 : XS.r4),
+        border: (muted || dark || color != null) ? null : Border.all(color: light ? const Color(0x111A1E26) : c.line),
+        boxShadow: light && !muted && color == null
+            ? const [BoxShadow(color: Color(0x06000000), blurRadius: 2, offset: Offset(0, 1)), BoxShadow(color: Color(0x0B000000), blurRadius: 24, offset: Offset(0, 8))]
+            : null,
       ),
       child: dark ? DefaultTextStyle.merge(style: TextStyle(color: c.onInk), child: child) : child,
     );
@@ -395,12 +413,13 @@ class XChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: on ? c.ink : c.surface,
-          borderRadius: BorderRadius.circular(XS.r1),
+          borderRadius: BorderRadius.circular(XS.r2),
           border: Border.all(color: on ? c.ink : c.line),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           if (check && on) ...[Icon(Icons.check_rounded, size: 14, color: c.onInk), const SizedBox(width: 4)],
-          Text(label, style: XT.small(context, color: on ? c.onInk : (dashed ? c.muted : c.ink)).copyWith(fontWeight: FontWeight.w500)),
+          // long labels (event types, food alerts, sports) wrap inside the chip instead of overflowing
+          Flexible(child: Text(label, style: XT.small(context, color: on ? c.onInk : (dashed ? c.muted : c.ink)).copyWith(fontWeight: FontWeight.w500))),
         ]),
       ),
     );
@@ -549,7 +568,7 @@ class XField extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14),
       constraints: BoxConstraints(minHeight: maxLines == 1 ? 52 : 100),
-      decoration: BoxDecoration(color: c.gray, borderRadius: BorderRadius.circular(XS.r2)),
+      decoration: BoxDecoration(color: c.gray, borderRadius: BorderRadius.circular(15)),
       child: Row(crossAxisAlignment: maxLines == 1 ? CrossAxisAlignment.center : CrossAxisAlignment.start, children: [
         if (prefix != null) ...[prefix!, const SizedBox(width: 10)],
         Expanded(

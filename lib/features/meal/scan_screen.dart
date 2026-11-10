@@ -32,6 +32,7 @@ class _ScanScreenState extends State<ScanScreen> {
   final Set<String> _removed = {};
   final Map<String, Json> _edits = {};
   String? _oil;
+  String _place = 'home', _eaten = 'all';
   List<Json>? _dishes;
   bool _busy = false;
   late bool _barcode = widget.barcode;
@@ -39,7 +40,10 @@ class _ScanScreenState extends State<ScanScreen> {
   static const _oils = ['light', 'normal', 'heavy'];
 
   /// What the server needs to recalculate this plate.
-  Json get _choices => {'portion': _portion, 'removed': _removed.toList(), 'edits': _edits, if (_oil != null) 'oil': _oil};
+  Json get _choices => {
+        'portion': _portion, 'removed': _removed.toList(), 'edits': _edits, if (_oil != null) 'oil': _oil,
+        'place': _place, 'eaten': _eaten,
+      };
 
   @override
   void initState() {
@@ -80,6 +84,8 @@ class _ScanScreenState extends State<ScanScreen> {
         _removed.clear();
         _edits.clear();
         _oil = null;
+        _place = 'home';
+        _eaten = 'all';
         _stage = _Stage.result;
       });
     } on ApiError catch (e) {
@@ -316,6 +322,8 @@ class _ScanScreenState extends State<ScanScreen> {
               ]),
             ],
             gap16,
+            _quickCheck(),
+            gap16,
             for (final w in _r.l('warnings')) ...[_warning(w), gap12],
             Text(
                 _r.i('recipe_share') > 0
@@ -404,6 +412,36 @@ class _ScanScreenState extends State<ScanScreen> {
     if (edit == null || !mounted) return;
     setState(() => edit.isEmpty ? _edits.remove(key) : _edits[key] = edit);
     _preview();
+  }
+
+  /// Where the plate came from and how much of it was eaten; the server scales the plate by both.
+  Widget _quickCheck() {
+    Widget row(String label, String value, List<(String, String)> opts, void Function(String) pick) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: XT.small(context, color: context.c.ink)),
+            gap8,
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final (v, l) in opts)
+                XChip(l, on: value == v, onTap: () {
+                  if (value == v) return;
+                  setState(() => pick(v));
+                  _preview();
+                }),
+            ]),
+          ],
+        );
+    return XCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [const Expanded(child: XLabel('Quick check')), Text('Sharpens the estimate', style: XT.small(context))]),
+        gap12,
+        if (!_barcode && _r.s('kind') != 'barcode') ...[
+          row('Where it came from', _place, const [('home', 'Home'), ('restaurant', 'Restaurant')], (v) => _place = v),
+          gap16,
+        ],
+        row('How much you ate', _eaten, const [('all', 'All of it'), ('most', 'Most'), ('half', 'About half')], (v) => _eaten = v),
+      ]),
+    );
   }
 
   Widget _warning(Json w) {

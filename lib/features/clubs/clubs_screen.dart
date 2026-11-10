@@ -134,7 +134,7 @@ class ClubRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => XRow(
         c.s('name'),
-        sub: '${c.s('type')} · ${fmtN(c.i('members'))} members · ${c.s('city')}',
+        sub: '${c.strs('sports').isNotEmpty ? c.strs('sports').first : c.s('type')} · ${fmtN(c.i('members'))} members · ${c.s('city')}',
         leading: XAvatar({'initial': c.s('initial'), 'name': c.s('name')}, size: 48, square: true),
         trailing: JoinButton(c),
         onTap: () => Go.club(context, c.i('id')),

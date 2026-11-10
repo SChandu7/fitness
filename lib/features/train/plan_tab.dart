@@ -7,6 +7,8 @@ import '../../core/ui.dart';
 import '../routes.dart';
 import '../shared/body_cards.dart';
 import 'day_sheet.dart';
+import 'event_prep.dart';
+import 'exercise_demo.dart';
 import 'exhaust_card.dart';
 import 'injury_sheet.dart';
 
@@ -40,6 +42,8 @@ class _PlanTabState extends State<PlanTab> {
           Text('${d.i('n_workouts')} workouts, ${d.i('rest_days')} rest day${d.i('rest_days') == 1 ? '' : 's'}', style: XT.h1(context)),
           gap4,
           Text('Tap a day to swap its cut with another day or change it.', style: XT.small(context)),
+          gap16,
+          EventPrepCard(d['event'] is Map ? d.m('event') : null),
           gap16,
           if (d.l('health_notes').isNotEmpty) ...[HealthPlanCard(d.l('health_notes')), gap16],
           _strip(week),
@@ -115,7 +119,9 @@ class _PlanTabState extends State<PlanTab> {
 
   Widget _today(Json t) {
     final rest = t.s('key') == 'rest';
-    final ex = t.l('ex');
+    final mine = t.m('mine');
+    final hasMine = mine.l('ex').isNotEmpty;
+    final ex = hasMine ? mine.l('ex') : t.l('ex');
     return XCard(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
@@ -132,9 +138,10 @@ class _PlanTabState extends State<PlanTab> {
               icon: t.b('rec_done') ? Icons.check_rounded : null, kind: t.b('rec_done') ? XBtn.secondary : XBtn.primary,
               onTap: () => Go.recoverySession(context)),
         ] else ...[
-          Text(t.s('label'), style: XT.h2(context)),
+          Text(hasMine ? mine.s('name') : t.s('label'), style: XT.h2(context)),
           gap4,
-          Text('${t.i('mins')} min · ${ex.where((e) => !e.b('skip')).length} exercises${t.b('done') ? ' · done' : ''}', style: XT.small(context)),
+          Text('${hasMine ? mine.i('mins') : t.i('mins')} min · ${ex.where((e) => !e.b('skip')).length} exercises'
+              '${hasMine ? ' · your workout' : ''}${t.b('done') ? ' · done' : ''}', style: XT.small(context)),
           gap8,
           for (final e in ex.take(4)) ExerciseRow(e),
           gap12,
@@ -192,7 +199,10 @@ class _PlanTabState extends State<PlanTab> {
                   ),
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(w.s('label'), style: XT.h3(context, color: _picked == w.i('i') ? c.onInk : c.ink).copyWith(fontSize: 15)),
+                      Text(w.s('mine').isNotEmpty ? w.s('mine') : w.s('label'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: XT.h3(context, color: _picked == w.i('i') ? c.onInk : c.ink).copyWith(fontSize: 15)),
                       const SizedBox(height: 2),
                       Text(w.s('sub'),
                           maxLines: 1,
@@ -300,7 +310,7 @@ class _PlanTabState extends State<PlanTab> {
       ]);
 }
 
-/// One exercise line: name, sets × reps, why it was adapted.
+/// One exercise line: name, sets × reps, why it was adapted, the variation you chose. Tap for a movement preview.
 class ExerciseRow extends StatelessWidget {
   final Json e;
   const ExerciseRow(this.e, {super.key});
@@ -308,25 +318,39 @@ class ExerciseRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.c;
     final skip = e.b('skip');
+    final variation = e.s('variation');
+    final demoName = e.b('adapted') ? e.s('name') : e.s('planned', e.s('name'));
     return Opacity(
       opacity: skip ? .55 : 1,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 11),
-        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.line))),
-        child: Row(children: [
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(e.s('name'), style: XT.h3(context).copyWith(fontSize: 15, decoration: skip ? TextDecoration.lineThrough : null)),
-              const SizedBox(height: 2),
-              Text.rich(TextSpan(children: [
-                TextSpan(text: e.s('detail')),
-                if (e.d('load_kg') > 0 && !skip) TextSpan(text: ' · ${e.d('load_kg') % 1 == 0 ? e.d('load_kg').toInt() : e.d('load_kg')} kg'),
-                if (e.s('why').isNotEmpty) TextSpan(text: ' · ${e.s('why')}', style: TextStyle(color: c.ink)),
-              ]), style: XT.small(context)),
+      child: Semantics(
+        button: !skip,
+        hint: skip ? null : 'Opens a movement preview',
+        child: Press(
+          onTap: skip ? null : () => showExerciseDemo(context, demoName),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 11),
+            decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.line))),
+            child: Row(children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(e.s('name'), style: XT.h3(context).copyWith(fontSize: 15, decoration: skip ? TextDecoration.lineThrough : null)),
+                  const SizedBox(height: 2),
+                  Text.rich(TextSpan(children: [
+                    TextSpan(text: e.s('detail')),
+                    if (e.d('load_kg') > 0 && !skip) TextSpan(text: ' · ${e.d('load_kg') % 1 == 0 ? e.d('load_kg').toInt() : e.d('load_kg')} kg'),
+                    if (e.s('why').isNotEmpty) TextSpan(text: ' · ${e.s('why')}', style: TextStyle(color: c.ink)),
+                  ]), style: XT.small(context)),
+                  if (variation.isNotEmpty && !skip) ...[
+                    const SizedBox(height: 2),
+                    Text('Your variation: $variation', style: XT.small(context, color: c.ink).copyWith(fontWeight: FontWeight.w500)),
+                  ],
+                ]),
+              ),
+              if (e.b('adapted')) const Padding(padding: EdgeInsets.only(right: 8), child: XDot()),
+              if (!skip) Icon(Icons.play_circle_outline_rounded, size: 20, color: c.muted),
             ]),
           ),
-          if (e.b('adapted')) const XDot(),
-        ]),
+        ),
       ),
     );
   }

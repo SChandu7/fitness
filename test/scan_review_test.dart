@@ -101,6 +101,19 @@ void main() {
     await settle(tester);
     expect(find.text(first.s('name')), findsOneWidget);
 
+    // 5. Quick check: eating about half of it halves the plate.
+    await tester.scrollUntilVisible(find.byKey(const Key('scan-total-kcal')), -400, scrollable: find.byType(Scrollable).first);
+    final whole = kcal(tester);
+    await tester.scrollUntilVisible(find.text('About half'), 200, scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(find.text('About half'));
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -160));
+    await tester.pump();
+    expect(find.text('Restaurant'), findsOneWidget);
+    await tester.tap(find.text('About half'));
+    await settle(tester);
+    await tester.scrollUntilVisible(find.byKey(const Key('scan-total-kcal')), -400, scrollable: find.byType(Scrollable).first);
+    expect((kcal(tester) - whole / 2).abs(), lessThanOrEqualTo(2));
+
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 21));
   });
