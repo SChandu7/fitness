@@ -45,5 +45,8 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        # Internal testers get every processed build automatically (TestFlight → Internal Testing).
-        submit_to_testflight: true
+        # Upload only. Internal testers (App Store Connect users in "Exerlio Internal") get every
+        # processed build without Apple review. To also send builds to external testers, first fill
+        # TestFlight → Test Information (feedback email, beta review contact) in App Store Connect,
+        # then set submit_to_testflight: true.
+        submit_to_testflight: false
