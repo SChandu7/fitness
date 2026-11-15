@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 import '../../core/api.dart';
 import '../../core/app_state.dart';
 import '../../core/theme.dart';
+import '../../core/track.dart';
 import '../../core/ui.dart';
 
 /// Tap an exercise: an animated movement preview, three form cues, and a variation you can keep.
 Future<void> showExerciseDemo(BuildContext context, String name) async {
+  Track.i.event('exercise_demo', props: {'exercise': name});
   Json d;
   try {
     d = Map<String, dynamic>.from(await Api.i.get('train/exercise/?name=${Uri.encodeQueryComponent(name)}') as Map);

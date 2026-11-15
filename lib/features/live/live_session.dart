@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/api.dart';
 import '../../core/device.dart';
 import '../../core/format.dart';
+import '../../core/track.dart';
 
 /// One exercise in a live sets session.
 class LiveEx {
@@ -88,6 +89,7 @@ class LiveSession extends ChangeNotifier {
   // ---------------------------------------------------------------- lifecycle
   Future<void> begin() async {
     active.value = this;
+    Track.i.event('live_start', props: {'sport': sport, 'gps': mode == 'gps'});
     _tick = Timer.periodic(const Duration(seconds: 1), (_) => _onTick());
     await Wakelock.set(true);
     if (mode == 'gps') await _startGps();
@@ -328,6 +330,7 @@ class LiveSession extends ChangeNotifier {
   }
 
   Future<void> discard() async {
+    Track.i.event('live_discard', props: {'sport': sport});
     _tick?.cancel();
     await _gps?.cancel();
     await Wakelock.set(false);

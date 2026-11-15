@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'core/app_state.dart';
 import 'core/theme.dart';
+import 'core/track.dart';
 import 'core/ui.dart';
 import 'features/auth/welcome_screen.dart';
 import 'features/onboarding/onboarding_screen.dart';
@@ -14,7 +15,12 @@ Future<void> main() async {
   final state = AppState();
   runApp(AppScope(state: state, child: const ExerlioApp()));
   await state.boot();
+  _lifecycle = AppLifecycleListener(onStateChange: Track.i.lifecycle);
 }
+
+// Kept for the life of the app: app opens, backgrounding and visit length for usage events.
+// ignore: unused_element
+AppLifecycleListener? _lifecycle;
 
 class ExerlioApp extends StatelessWidget {
   const ExerlioApp({super.key});
@@ -45,6 +51,7 @@ class ExerlioApp extends StatelessWidget {
           ),
         );
       },
+      navigatorObservers: [TrackObserver()],
       home: const _Gate(),
     );
   }

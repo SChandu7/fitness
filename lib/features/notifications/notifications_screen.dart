@@ -6,6 +6,7 @@ import '../../core/api.dart';
 import '../../core/app_state.dart';
 import '../../core/theme.dart';
 import '../../core/ui.dart';
+import '../settings/support_screen.dart';
 import '../routes.dart';
 import '../shell/shell.dart';
 import '../social/comments_sheet.dart';
@@ -328,6 +329,8 @@ class _NotifRow extends StatelessWidget {
         if (id > 0) await showComments(context, 'posts/$id');
       case 'activity':
         if (id > 0) await Go.activity(context, id);
+      case 'support':
+        await context.push(id > 0 ? SupportTicketScreen(id: id) : const SupportScreen());
       default:
         final a = n.m('actor');
         if (a.isNotEmpty) await Go.person(context, a.i('id'));

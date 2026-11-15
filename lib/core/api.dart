@@ -29,7 +29,11 @@ class Api {
   static final Api i = Api._();
 
   String? token;
-  void Function()? onUnauthorized;
+  /// Called with the server's message when a session is refused (signed out, suspended).
+  void Function(String message)? onUnauthorized;
+
+  /// Every finished call, for usage events (core/track.dart). method is 'ERROR' on failure.
+  void Function(String method, String path, Object? body, Object? result)? onResult;
   final _client = http.Client();
   static const _timeout = Duration(seconds: 20);
 
@@ -41,14 +45,14 @@ class Api {
 
   Uri _uri(String path) => Uri.parse('$kApiBase/${path.startsWith('/') ? path.substring(1) : path}');
 
-  Future<dynamic> get(String path) => _send(() => _client.get(_uri(path), headers: _headers));
+  Future<dynamic> get(String path) => _send(() => _client.get(_uri(path), headers: _headers), method: 'GET', path: path);
   Future<dynamic> post(String path, [Object? body]) =>
-      _send(() => _client.post(_uri(path), headers: _headers, body: jsonEncode(body ?? {})));
+      _send(() => _client.post(_uri(path), headers: _headers, body: jsonEncode(body ?? {})), method: 'POST', path: path, body: body);
   Future<dynamic> put(String path, [Object? body]) =>
-      _send(() => _client.put(_uri(path), headers: _headers, body: jsonEncode(body ?? {})));
+      _send(() => _client.put(_uri(path), headers: _headers, body: jsonEncode(body ?? {})), method: 'PUT', path: path, body: body);
   Future<dynamic> patch(String path, [Object? body]) =>
-      _send(() => _client.patch(_uri(path), headers: _headers, body: jsonEncode(body ?? {})));
-  Future<dynamic> delete(String path) => _send(() => _client.delete(_uri(path), headers: _headers));
+      _send(() => _client.patch(_uri(path), headers: _headers, body: jsonEncode(body ?? {})), method: 'PATCH', path: path, body: body);
+  Future<dynamic> delete(String path) => _send(() => _client.delete(_uri(path), headers: _headers), method: 'DELETE', path: path);
 
   /// Multipart upload: photos, reels, stories, meal scans.
   Future<dynamic> upload(String path, {Map<String, String> fields = const {}, Map<String, File> files = const {}}) {
@@ -61,7 +65,7 @@ class Api {
         req.files.add(await http.MultipartFile.fromPath(e.key, e.value.path));
       }
       return http.Response.fromStream(await req.send());
-    }, timeout: const Duration(seconds: 90));
+    }, timeout: const Duration(seconds: 90), method: 'POST', path: path, body: fields);
   }
 
   /// Raw text download (CSV export).
@@ -71,7 +75,25 @@ class Api {
     return utf8.decode(res.bodyBytes);
   }
 
-  Future<dynamic> _send(Future<http.Response> Function() run, {Duration timeout = _timeout}) async {
+  Future<dynamic> _send(Future<http.Response> Function() run,
+      {Duration timeout = _timeout, String method = 'GET', String path = '', Object? body}) async {
+    try {
+      final data = await _sendRaw(run, timeout);
+      _report(method, path, body, data);
+      return data;
+    } on ApiError catch (e) {
+      if (e.status >= 500 || e.status == 404) _report('ERROR', path, null, {'code': e.status});
+      rethrow;
+    }
+  }
+
+  void _report(String method, String path, Object? body, Object? result) {
+    try {
+      onResult?.call(method, path, body, result);
+    } catch (_) {}
+  }
+
+  Future<dynamic> _sendRaw(Future<http.Response> Function() run, Duration timeout) async {
     http.Response res;
     try {
       res = await run().timeout(timeout);
@@ -95,7 +117,7 @@ class Api {
       final msg = data is Map
           ? (data['message'] ?? data['detail'] ?? 'Something went wrong.').toString()
           : 'Something went wrong.';
-      if (res.statusCode == 401) onUnauthorized?.call();
+      if (res.statusCode == 401) onUnauthorized?.call(msg);
       throw ApiError(msg, res.statusCode);
     }
     return data;

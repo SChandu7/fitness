@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/app_state.dart';
 import '../../core/theme.dart';
 import '../../core/ui.dart';
+import '../../core/track.dart';
 import '../clubs/clubs_screen.dart';
 import '../home/home_screen.dart';
 import '../live/live_screen.dart';
@@ -37,10 +38,24 @@ class _ShellState extends State<Shell> {
   bool _logOpen = false;
   final _pages = const [HomeScreen(), TrainScreen(), ClubsScreen(), ProfileScreen()];
 
+  static const _tabNames = ['home', 'train', 'clubs', 'profile'];
+
+  void _onTab() => Track.i.event('tab_view', props: {'tab': _tabNames[ShellNav.tab.value.clamp(0, 3)]});
+  void _onHomeTab() => Track.i.event('tab_view', props: {'tab': ShellNav.homeTab.value == 1 ? 'social' : 'home'});
+
   @override
   void initState() {
     super.initState();
+    ShellNav.tab.addListener(_onTab);
+    ShellNav.homeTab.addListener(_onHomeTab);
     WidgetsBinding.instance.addPostFrameCallback((_) => _resume());
+  }
+
+  @override
+  void dispose() {
+    ShellNav.tab.removeListener(_onTab);
+    ShellNav.homeTab.removeListener(_onHomeTab);
+    super.dispose();
   }
 
   /// After a crash or the phone killing the app: bring back a running session
@@ -62,6 +77,7 @@ class _ShellState extends State<Shell> {
   }
 
   Future<void> _openLog() async {
+    Track.i.event('log_open');
     setState(() => _logOpen = true);
     await showLogSheet(context);
     if (mounted) setState(() => _logOpen = false);

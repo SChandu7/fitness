@@ -1,7 +1,9 @@
 // Renders every screen, light and dark, at 390x844 against a running, seeded backend.
 //
 //   python manage.py seed_exerlio --reset && python manage.py runserver 0.0.0.0:8000
-//   flutter test --dart-define=EXERLIO_API=http://127.0.0.1:8000/api/exerlio/v1
+//   flutter test --concurrency=1 --dart-define=EXERLIO_API=http://127.0.0.1:8000/api/exerlio/v1
+//
+// --concurrency=1 matters: the test files share one demo account on the server.
 //
 // Fails on any exception or layout overflow.
 import 'dart:io';
@@ -41,6 +43,7 @@ import 'package:fitness/features/recovery/recovery_screen.dart';
 import 'package:fitness/features/recovery/recovery_session_screen.dart';
 import 'package:fitness/features/settings/devices_screen.dart';
 import 'package:fitness/features/settings/settings_screen.dart';
+import 'package:fitness/features/settings/support_screen.dart';
 import 'package:fitness/features/shell/shell.dart';
 import 'package:fitness/features/social/compose_screen.dart';
 import 'package:fitness/features/social/reels_screen.dart';
@@ -98,7 +101,8 @@ void main() {
       errors.add('[$current] ${msg.split('\n').first}');
     };
 
-    late int chId, threadId, clubId, privateClubId, publicPerson, privatePerson, actId;
+    late int ticketId;
+  late int chId, threadId, clubId, privateClubId, publicPerson, privatePerson, actId;
     late Json summary;
     late List<Json> reels;
     await tester.runAsync(() async {
@@ -115,6 +119,7 @@ void main() {
       final people = (await getJ('people/')).l('items');
       privatePerson = people.firstWhere((p) => p.b('is_private'), orElse: () => people.first).i('id');
       actId = (await getJ('activities/?gps=1')).l('items').first.i('id');
+      ticketId = Map<String, dynamic>.from(await Api.i.post('support/', {'category': 'gps', 'message': 'Smoke test: my run stopped when the screen locked.'}) as Map).m('ticket').i('id');
       summary = {'activity': await getJ('activities/$actId/'), 'prs': const [], 'finished': const []};
       final r = await Api.i.get('reels/');
       reels = r is Map ? Map<String, dynamic>.from(r).l('items') : [for (final x in r as List) Map<String, dynamic>.from(x as Map)];
@@ -166,6 +171,8 @@ void main() {
       'Settings': const SettingsScreen(),
       'Pro': const ProScreen(),
       'Devices': const DevicesScreen(),
+      'Support': const SupportScreen(),
+      'Support ticket': SupportTicketScreen(id: ticketId),
       'Onboarding redo': const OnboardingScreen(redo: true),
     };
 

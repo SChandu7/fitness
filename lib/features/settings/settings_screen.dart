@@ -7,6 +7,7 @@ import '../../core/app_state.dart';
 import '../../core/device.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
+import '../../core/track.dart';
 import '../../core/ui.dart';
 import '../auth/forgot_screen.dart';
 import '../people/social_list_screen.dart';
@@ -14,6 +15,7 @@ import '../profile/edit_profile_sheet.dart';
 import '../routes.dart';
 import '../shared/pickers.dart';
 import 'devices_screen.dart';
+import 'support_screen.dart';
 import 'womens_health_screen.dart';
 
 /// Settings: every row is wired to the server (users.settings JSON or a real field).
@@ -201,7 +203,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ]),
       ('Support', 'Help, feedback and policies', Icons.help_outline_rounded, [
         _link('Help centre', 'Guides and common questions', (c) => () => _info(c, 'Help centre', 'Contact details and answers to common questions.', 'https://api.chandus7.in/api/exerlio/v1/legal/#support')),
-        _link('Report a problem', 'Something broken or wrong', (c) => () => _report(c)),
+        _link('Contact support', 'Questions, problems and your conversations with us', (c) => () => c.push(const SupportScreen())),
         _link('Terms and privacy', 'The long version', (c) => () => _info(c, 'Terms and privacy', 'What we collect, how we use it, and the rules for using Exerlio.', 'https://api.chandus7.in/api/exerlio/v1/legal/')),
       ]),
     ];
@@ -312,22 +314,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _report(BuildContext context) async {
-    final text = TextEditingController();
-    final send = await showXSheet<bool>(context, (ctx) => XSheetBody(children: [
-          const XSheetHead('Report a problem', sub: 'What happened, and what did you expect? Short is fine.'),
-          XField(controller: text, hint: 'The scan button did nothing on the meal screen…', maxLines: 5),
-          gap16,
-          XButton('Send', onTap: () => Navigator.pop(ctx, true)),
-          gap16,
-        ]));
-    if (send == true && context.mounted) {
-      final r = await attempt(context, () => Api.i.post('report/', {'kind': 'app', 'reason': text.text.trim()}));
-      if (r != null && context.mounted) context.say('${(r as Map)['message']}');
-    }
-    text.dispose();
-  }
-
   Future<void> _info(BuildContext context, String title, String body, String url) => showXSheet(context, (ctx) => XSheetBody(children: [
         XSheetHead(title),
         Text(body, style: XT.body(ctx)),
@@ -432,7 +418,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             gap8,
             XButton('Delete account', kind: XBtn.secondary, onTap: _delete),
             gap12,
-            Text('Exerlio 3.2', textAlign: TextAlign.center, style: XT.small(context)),
+            Text('Exerlio 3.3', textAlign: TextAlign.center, style: XT.small(context)),
           ]),
         ),
       ]),
@@ -474,6 +460,7 @@ class ProScreen extends StatelessWidget {
     return XScreen(
       dock: XDock(children: [
         XButton(pro ? 'Pro is on' : 'Start Pro', icon: pro ? Icons.check_rounded : null, kind: pro ? XBtn.secondary : XBtn.accent, onTap: () {
+          if (!pro) Track.i.event('paywall_tap', props: {'plan': 'pro'});
           context.say(pro ? 'Pro is on for this account' : 'Pro checkout opens with the store release. Everything else stays free.');
         }),
         gap8,

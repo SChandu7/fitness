@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
 import 'format.dart';
+import 'track.dart';
 
 /// Session + app-wide preferences. Screen data is NOT kept here —
 /// each screen loads its own data from the API.
@@ -60,9 +61,13 @@ class AppState extends ChangeNotifier {
       } catch (_) {}
     }
     Api.i.token = token;
-    Api.i.onUnauthorized = () {
-      if (token != null) logout(silent: true);
+    Api.i.onUnauthorized = (msg) {
+      if (token == null) return;
+      logout(silent: true);
+      // A suspended account is told why instead of silently landing on the welcome screen.
+      if (msg.contains('suspended')) say(msg);
     };
+    await Track.i.init(prefs!);
     await loadCatalog();
     if (token != null) {
       try {
@@ -111,6 +116,8 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> logout({bool silent = false}) async {
+    Track.i.event('logout');
+    await Track.i.flush();
     if (!silent) {
       try {
         await Api.i.post('auth/logout/');
@@ -201,9 +208,11 @@ extension AppX on BuildContext {
   AppState get app => AppScope.read(this);
   AppState get appWatch => AppScope.of(this);
   void say(String m) => AppScope.read(this).say(m);
-  Future<T?> push<T>(Widget page) => Navigator.of(this).push<T>(MaterialPageRoute(builder: (_) => page));
+  Future<T?> push<T>(Widget page) =>
+      Navigator.of(this).push<T>(MaterialPageRoute(builder: (_) => page, settings: RouteSettings(name: '${page.runtimeType}')));
 
   /// Opens above the tab bar (full-screen flows: live session, scan, stories).
   Future<T?> pushRoot<T>(Widget page) =>
-      Navigator.of(this, rootNavigator: true).push<T>(MaterialPageRoute(builder: (_) => page, fullscreenDialog: false));
+      Navigator.of(this, rootNavigator: true)
+          .push<T>(MaterialPageRoute(builder: (_) => page, fullscreenDialog: false, settings: RouteSettings(name: '${page.runtimeType}')));
 }
